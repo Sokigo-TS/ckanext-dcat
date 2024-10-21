@@ -1,6 +1,8 @@
 import json
 from decimal import Decimal, DecimalException
 
+
+
 from rdflib import term, URIRef, BNode, Literal
 import ckantoolkit as toolkit
 
@@ -34,8 +36,21 @@ from .base import (
 
 config = toolkit.config
 
+
 DISTRIBUTION_LICENSE_FALLBACK_CONFIG = "ckanext.dcat.resource.inherit.license"
 
+
+LICENSE_URI = {
+    'odc-pddl': 'http://www.opendefinition.org/licenses/odc-pddl',
+    'odc-odbl': 'http://www.opendefinition.org/licenses/odc-odbl',
+    'odc-by': 'http://www.opendefinition.org/licenses/odc-by',
+    'cc-zero': 'http://www.opendefinition.org/licenses/cc-zero',
+    'cc-by': 'http://www.opendefinition.org/licenses/cc-by',
+    'cc-by-sa': 'http://www.opendefinition.org/licenses/cc-by-sa',
+    'gfdl': 'http://www.opendefinition.org/licenses/gfdl',
+    'uk-ogl': 'https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/',
+    'cc-nc': 'http://creativecommons.org/licenses/by-nc/2.0/',
+}
 
 class BaseEuropeanDCATAPProfile(RDFProfile):
     """
@@ -135,7 +150,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 dataset_dict["extras"].append(
                     {"key": "creator_{0}".format(key), "value": creator.get(key)}
                 )
-
+        
         # Temporal
         start, end = self._time_interval(dataset_ref, DCT.temporal)
         if start:
@@ -257,6 +272,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                     "publisher_name",
                     "publisher_email",
                 ):
+
                     extra["key"] = "dcat_" + extra["key"]
 
                 if extra["key"] == "language":
@@ -282,7 +298,9 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             ("version", OWL.versionInfo, ["dcat_version"], Literal),
             ("version_notes", ADMS.versionNotes, None, Literal),
             ("frequency", DCT.accrualPeriodicity, None, URIRefOrLiteral, DCT.Frequency),
+            #("access_rights", DCT.accessRights, None, URIRefOrLiteral, DCT.AccessRights),
             ("dcat_type", DCT.type, None, URIRefOrLiteral),
+            #("provenance", DCT.provenance, None, URIRefOrLiteral, DCT.ProvenanceStatement),
         ]
         self._add_triples_from_dict(dataset_dict, dataset_ref, items)
 
@@ -456,7 +474,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
             ]
-            self._add_triples_from_dict(creator_details, creator_ref, items)
+            self._add_triples_from_dict(creator_details, creator_ref, items)    
 
         # Temporal
         start = self._get_dataset_value(dataset_dict, "temporal_start")
@@ -513,7 +531,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             dataset_ref,
             DCT.provenance,
             DCT.ProvenanceStatement
-        )
+        )   
 
         # Resources
         for resource_dict in dataset_dict.get("resources", []):
@@ -529,7 +547,8 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 ("name", DCT.title, None, Literal),
                 ("description", DCT.description, None, Literal),
                 ("status", ADMS.status, None, URIRefOrLiteral),
-                ("license", DCT.license, None, URIRefOrLiteral, DCT.LicenseDocument),
+                ("rights", DCT.rights, None, URIRefOrLiteral, DCT.RightsStatement),
+                #("license", DCT.license, None, URIRefOrLiteral, DCT.LicenseDocument),
                 ("access_url", DCAT.accessURL, None, URIRef, RDFS.Resource),
                 ("download_url", DCAT.downloadURL, None, URIRef, RDFS.Resource),
             ]
@@ -551,7 +570,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 distribution,
                 DCT.rights,
                 DCT.RightsStatement
-            )
+            )  
 
             # Set default license for distribution if needed and available
 
@@ -563,20 +582,35 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                         URIRefOrLiteral(resource_license_fallback),
                     )
                 )
-            # TODO: add an actual field to manage this
-            if (distribution, DCT.license, None) in g:
+            
+            licenseUri = None
+            licenseVal = resource_dict.get("license")
+            
+            if licenseVal:
+                # Check against the mapping
+                if licenseVal in LICENSE_URI:
+                    licenseUri = LICENSE_URI[licenseVal]  
+            
+                # Default to "UnknownIPR" if no valid licenseUri found
+                if not licenseUri:
+                    licenseUri = "http://purl.org/adms/licencetype/UnknownIPR"
+            
+                # Directly add the type property to the distribution node
                 g.add(
                     (
-                        list(g.objects(distribution, DCT.license))[0],
-                        DCT.type,
-                        URIRef("http://purl.org/adms/licencetype/UnknownIPR")
+                        distribution,
+                        DCT.license,
+                        URIRef(licenseUri)
                     )
                 )
 
-            # Format
+
+            # Format mapping logic inside your method
             mimetype = resource_dict.get("mimetype")
             fmt = resource_dict.get("format")
-
+           
+            fmt = None
+            
             # IANA media types (either URI or Literal) should be mapped as mediaType.
             # In case format is available and mimetype is not set or identical to format,
             # check which type is appropriate.
@@ -586,19 +620,21 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                     or not fmt.startswith("http")
                     and "/" in fmt
                 ):
-                    # output format value as dcat:mediaType instead of dct:format
+                    # Output format value as dcat:mediaType instead of dct:format
                     mimetype = fmt
                     fmt = None
                 else:
                     # Use dct:format
                     mimetype = None
-
+            
+            # Add mediaType if mimetype is correctly set
             if mimetype:
                 mimetype = URIRefOrLiteral(mimetype)
                 g.add((distribution, DCAT.mediaType, mimetype))
                 if isinstance(mimetype, URIRef):
                     g.add((mimetype, RDF.type, DCT.MediaType))
-
+            
+            # Fallback to dct:format if fmt is still set and not replaced with MIME type
             if fmt:
                 fmt = URIRefOrLiteral(fmt)
                 g.add((distribution, DCT["format"], fmt))
@@ -631,7 +667,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                         (
                             distribution,
                             DCAT.byteSize,
-                            Literal(Decimal(resource_dict["size"]), datatype=XSD.decimal),
+                            Literal(int(resource_dict["size"]), datatype=XSD.nonNegativeInteger),
                         )
                     )
                 except (ValueError, TypeError, DecimalException):
@@ -684,7 +720,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             (
                 "language",
                 DCT.language,
-                config.get("ckan.locale_default", "en"),
+                config.get("dcat_lang", "http://publications.europa.eu/resource/authority/language/SWE"),
                 URIRefOrLiteral,
             ),
         ]
@@ -701,3 +737,4 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
         modified = self._last_catalog_modification()
         if modified:
             self._add_date_triple(catalog_ref, DCT.modified, modified)
+            
