@@ -427,7 +427,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             g.add((dataset_ref, DCT.publisher, publisher_ref))
             items = [
                 ("name", FOAF.name, None, Literal),
-                ("email", FOAF.mbox, None, Literal),
+                ("email", FOAF.mbox, None, URIRef),
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
