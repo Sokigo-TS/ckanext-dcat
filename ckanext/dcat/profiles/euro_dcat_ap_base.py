@@ -425,9 +425,14 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
         if publisher_ref:
             g.add((publisher_ref, RDF.type, FOAF.Agent))
             g.add((dataset_ref, DCT.publisher, publisher_ref))
+            
+            email = publisher_details.get("email")
+            if email:
+                email_uri = URIRef(f"mailto:{email}")
+                g.add((publisher_ref, FOAF.mbox, email_uri))
+                
             items = [
                 ("name", FOAF.name, None, Literal),
-                ("email", FOAF.mbox, None, URIRef),
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
