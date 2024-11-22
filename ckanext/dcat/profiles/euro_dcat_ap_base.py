@@ -635,6 +635,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             # Add mediaType if mimetype is correctly set
             if mimetype:
                 mimetype = URIRefOrLiteral(mimetype)
+                fmt = mimetype
                 g.add((distribution, DCAT.mediaType, mimetype))
                 if isinstance(mimetype, URIRef):
                     g.add((mimetype, RDF.type, DCT.MediaType))
