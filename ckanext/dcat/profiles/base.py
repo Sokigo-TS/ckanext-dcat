@@ -13,6 +13,9 @@ from ckan.lib.helpers import resource_formats
 from ckanext.dcat.utils import DCAT_EXPOSE_SUBCATALOGS
 from ckanext.dcat.validators import is_year, is_year_month, is_date
 
+import logging
+log = logging.getLogger(__name__)
+
 DCT = Namespace("http://purl.org/dc/terms/")
 DCAT = Namespace("http://www.w3.org/ns/dcat#")
 DCATAP = Namespace("http://data.europa.eu/r5r/")
@@ -715,40 +718,75 @@ class RDFProfile(object):
 
     def _add_spatial_value_to_graph(self, spatial_ref, predicate, value):
         """
-        Adds spatial triples to the graph. Assumes that value is a GeoJSON string
-        or object.
+        Adds spatial geometry (GeoJSON and WKT) to the graph under a predicate like locn:geometry.
+        Supports both formats when available.
         """
         spatial_formats = aslist(
             config.get(
                 "ckanext.dcat.output_spatial_format", DEFAULT_SPATIAL_FORMATS
+                )
             )
-        )
-
+    
         if isinstance(value, str):
             try:
+                # Parse value if it's a JSON string
                 value = json.loads(value)
             except (TypeError, ValueError):
                 return
-
+    
         if "wkt" in spatial_formats:
-            # WKT, because GeoDCAT-AP says so
+            # Create WKT from GeoJSON using shapely
             try:
-                self.g.add(
-                    (
+                from shapely.geometry import shape
+                
+                geometry = shape(value)  # Convert GeoJSON (dict) to Shapely geometry
+                wkt_representation = geometry.wkt
+                
+                if predicate == LOCN.geometry or predicate == DCAT.bbox:
+                    self.g.add((
                         spatial_ref,
                         predicate,
                         Literal(
-                            wkt.dumps(value, decimals=4),
-                            datatype=GSP.wktLiteral,
+                            wkt_representation,
+                            datatype=GSP.wktLiteral,  # WKT datatype
                         ),
-                    )
-                )
-            except (TypeError, ValueError, InvalidGeoJSONException):
-                pass
+                    ))
+                    
+                if predicate == DCAT.centroid:  
+                    from shapely.wkt import dumps as wkt_dumps
+                    from shapely.geometry import Point, Polygon
+  
+                    centroid = geometry.centroid
+                    
+                    # Round centroid coordinates directly
+                    rounded_centroid = Point(round(centroid.x, 4), round(centroid.y, 4))
+                    
+                    wkt_centroid = rounded_centroid.wkt
+    
+                    self.g.add((
+                        spatial_ref,
+                        predicate,
+                        Literal(
+                            wkt_centroid,
+                            datatype=GSP.wktLiteral,  # WKT datatype
+                        ),
+                    ))   
+                
+            except Exception as e:
+                log.info(f"Error generating WKT: {e}")
+    
 
         if "geojson" in spatial_formats:
-            # GeoJSON
-            self.g.add((spatial_ref, predicate, Literal(json.dumps(value), datatype=GEOJSON_IMT)))
+            log.info(f"geojson is vailable with value -> {value}")
+            # Add the GeoJSON geometry as a Literal with the correct datatype
+            self.g.add((
+                spatial_ref,
+                predicate,  # e.g., locn:geometry
+                Literal(
+                    json.dumps(value),  # Serialize Python dictionary back to JSON string
+                    datatype=GEOJSON_IMT,  # GeoJSON media type: "application/vnd.geo+json"
+                ),
+            ))
 
 
     def _add_spatial_to_dict(self, dataset_dict, key, spatial):
@@ -1084,18 +1122,26 @@ class RDFProfile(object):
         return roots[0]
 
     def _get_or_create_spatial_ref(self, dataset_dict, dataset_ref):
+        """
+        Retrieves or creates a spatial reference (dct:Location) for the dataset_ref.
+        """
+        # Check if a spatial node already exists
         for spatial_ref in self.g.objects(dataset_ref, DCT.spatial):
-            if spatial_ref:
+            if isinstance(spatial_ref, BNode):  # Only reuse blank nodes (not URIs)
                 return spatial_ref
-
-        # Create new spatial_ref
-        spatial_uri = self._get_dataset_value(dataset_dict, "spatial_uri")
-        if spatial_uri:
-            spatial_ref = CleanedURIRef(spatial_uri)
-        else:
-            spatial_ref = BNode()
+    
+        # Create a new spatial reference node (blank node for <dct:Location>)
+        spatial_ref = BNode()
         self.g.add((spatial_ref, RDF.type, DCT.Location))
-        self.g.add((dataset_ref, DCT.spatial, spatial_ref))
+        self.g.add((dataset_ref, DCT.spatial, spatial_ref))  # Link <dct:spatial> to the dataset
+    
+        # Retrieve spatial geometry information
+        spatial_geom = self._get_dataset_value(dataset_dict, "spatial")
+        if spatial_geom:
+            self._add_spatial_value_to_graph(spatial_ref, LOCN.geometry, spatial_geom)  # Add locn:geometry
+
+    
+        # No need to handle spatial_uri here—it will be handled separately
         return spatial_ref
 
     # Public methods for profiles to implement
@@ -1182,3 +1228,28 @@ class RDFProfile(object):
         that must be used to reference the dataset when working with the graph.
         """
         pass
+
+    def _replace_contact_name(self, value):
+        """
+        Replace contact_name using a dynamic dictionary retrieved from a helper method.
+        """
+        # Call the helper method to get the mapping dictionary
+        dataset_choices = self._fetch_contact_name_mapping()
+    
+         # Search for the matching 'value' and retrieve the corresponding 'label'
+        for item in dataset_choices:
+            if item['value'] == value:  # Match `contact_name` (value) with `value` in dataset_choices
+                return item['label']  # Return the corresponding label
+    
+        # Return the original value if no match is found
+        return value
+    
+    
+    def _fetch_contact_name_mapping(self):
+        """
+        Call a helper method to retrieve a dictionary mapping contact names to labels.
+        """
+        from ckan.plugins.toolkit import h  # Import helper functions
+    
+        # Assuming a helper method like `get_contact_name_mapping` exists
+        return h.get_maintainer_from_json(None)  # Example: Replace with actual helper method

@@ -1,5 +1,5 @@
 import json
-from decimal import Decimal, DecimalException
+from decimal import Decimal, DecimalException, ROUND_HALF_UP
 
 from rdflib import URIRef, BNode, Literal, Namespace
 from ckanext.dcat.utils import resource_uri
@@ -92,25 +92,6 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
         spatial = self._spatial(dataset_ref, DCT.spatial)
         for key in ("bbox", "centroid"):
             self._add_spatial_to_dict(dataset_dict, key, spatial)
-
-        # Spatial resolution in meters
-        spatial_resolution = self._object_value_float_list(
-            dataset_ref, DCAT.spatialResolutionInMeters
-        )
-        if spatial_resolution:
-            # For some reason we incorrectly allowed lists in this property at
-            # some point, keep support for it but default to single value
-            value = (
-                spatial_resolution[0]
-                if len(spatial_resolution) == 1
-                else json.dumps(spatial_resolution)
-            )
-            dataset_dict["extras"].append(
-                {
-                    "key": "spatial_resolution_in_meters",
-                    "value": value,
-                }
-            )
 
         # Resources
         for distribution in self._distributions(dataset_ref):
@@ -277,14 +258,17 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
         if spatial_resolution_in_meters:
             for value in spatial_resolution_in_meters:
                 try:
+                    # Convert to Decimal and round to 3 decimal places
+                    decimal_value = Decimal(value).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
                     self.g.add(
                         (
                             dataset_ref,
                             DCAT.spatialResolutionInMeters,
-                            Literal(Decimal(value), datatype=XSD.decimal),
+                            Literal(decimal_value, datatype=XSD.decimal),
                         )
                     )
                 except (ValueError, TypeError, DecimalException):
+                    # Fallback for invalid values: add the raw value without modification
                     self.g.add(
                         (dataset_ref, DCAT.spatialResolutionInMeters, Literal(value))
                     )

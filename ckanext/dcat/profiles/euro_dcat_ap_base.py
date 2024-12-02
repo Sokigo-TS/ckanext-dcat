@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal, DecimalException
 
+from ckan.plugins.toolkit import h
 
 
 from rdflib import term, URIRef, BNode, Literal
@@ -33,6 +34,10 @@ from .base import (
     GEOJSON_IMT,
     namespaces,
 )
+
+import logging
+log = logging.getLogger(__name__)
+
 
 config = toolkit.config
 
@@ -357,6 +362,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 VCARD.fn,
                 "contact_name",
                 ["maintainer", "author"],
+                value_modifier=self._replace_contact_name
             )
             # Add mail address as URIRef, and ensure it has a mailto: prefix
             self._add_triple_from_dict(
@@ -384,6 +390,14 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             # Legacy publisher_* extras
             publisher_uri = self._get_dataset_value(dataset_dict, "publisher_uri")
             publisher_name = self._get_dataset_value(dataset_dict, "publisher_name")
+            
+            publishers = h.get_publisher_from_json(None)
+            
+            publisher_name = next(
+                            (item['label'] for item in publishers if item['value'] == publisher_name),
+                            publisher_name  # Default value if no match is found
+                        )
+            
             if publisher_uri:
                 publisher_ref = CleanedURIRef(publisher_uri)
             else:
@@ -454,6 +468,14 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             # Legacy creator_* extras
             creator_uri = self._get_dataset_value(dataset_dict, "creator_uri")
             creator_name = self._get_dataset_value(dataset_dict, "creator_name")
+            
+            creators = h.get_producer_from_json(None)
+            
+            creator_name = next(
+                            (item['label'] for item in creators if item['value'] == creator_name),
+                            creator_name  # Default value if no match is found
+                        )
+            
             if creator_uri:
                 creator_ref = CleanedURIRef(creator_uri)
             else:
@@ -495,6 +517,12 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             g.add((dataset_ref, DCT.temporal, temporal_extent))
 
         # Spatial
+        
+        # Process spatial URI (if available in `dataset_dict`)
+        spatial_uri = self._get_dataset_value(dataset_dict, "spatial_uri")
+        if spatial_uri:
+            self.g.add((dataset_ref, DCT.spatial, URIRef(spatial_uri)))
+        
         spatial_text = self._get_dataset_value(dataset_dict, "spatial_text")
         spatial_geom = self._get_dataset_value(dataset_dict, "spatial")
 
@@ -502,12 +530,14 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             spatial_ref = self._get_or_create_spatial_ref(dataset_dict, dataset_ref)
 
             if spatial_text:
-                g.add((spatial_ref, SKOS.prefLabel, Literal(spatial_text)))
-
+                g.add((spatial_ref, SKOS.prefLabel, Literal(spatial_text)))           
+                       
+            # Add spatial geometry (GeoJSON and/or WKT) if available
             if spatial_geom:
-                self._add_spatial_value_to_graph(
-                    spatial_ref, LOCN.geometry, spatial_geom
-                )
+                self._add_spatial_value_to_graph(spatial_ref, LOCN.geometry, spatial_geom)
+                self._add_spatial_value_to_graph(spatial_ref, DCAT.centroid, spatial_geom)
+                self._add_spatial_value_to_graph(spatial_ref, DCAT.bbox, spatial_geom)
+         
 
         # Use fallback license if set in config
         resource_license_fallback = None
