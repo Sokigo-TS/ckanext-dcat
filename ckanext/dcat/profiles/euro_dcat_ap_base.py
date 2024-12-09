@@ -759,6 +759,18 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 config.get("dcat_lang", "http://publications.europa.eu/resource/authority/language/SWE"),
                 URIRefOrLiteral,
             ),
+             (
+                "spatial",
+                DCT.spatial,
+                config.get("ckan.site_spatial"),
+                URIRef,
+            ), 
+             (
+                "license",
+                DCT.license,
+                config.get("ckan.site_license"),
+                URIRefOrLiteral,
+            ),            
         ]
         for item in items:
             key, predicate, fallback, _type = item
@@ -773,4 +785,42 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
         modified = self._last_catalog_modification()
         if modified:
             self._add_date_triple(catalog_ref, DCT.modified, modified)
+            
+        issued = config.get("ckan.site_issued")
+        if issued:
+            self._add_date_triple(catalog_ref, DCT.issued, issued)    
+            
+        # Catalog Publisher
+        publisher_uri = config.get("ckan.site_publisher_uri")
+               
+        if publisher_uri:
+            publisher_ref = CleanedURIRef(publisher_uri)
+        else:
+            # No publisher_uri
+            publisher_ref = BNode()
+        publisher_details = {
+            "name": config.get("ckan.site_publisher_name"),
+            "email": config.get("ckan.site_publisher_email"),
+            "url": config.get("ckan.site_publisher_url"),
+            "type": config.get("ckan.site_publisher_type"),
+        }
+        
+        # Add to graph
+        if publisher_ref:
+            g.add((publisher_ref, RDF.type, FOAF.Agent))
+            g.add((catalog_ref, DCT.publisher, publisher_ref))
+            
+            email = publisher_details.get("email")
+            if email:
+                email_uri = URIRef(f"mailto:{email}")
+                g.add((publisher_ref, FOAF.mbox, email_uri))
+                
+            items = [
+                ("name", FOAF.name, None, Literal),
+                ("url", FOAF.homepage, None, URIRef),
+                ("type", DCT.type, None, URIRefOrLiteral),
+                #("identifier", DCT.identifier, None, URIRefOrLiteral),
+            ]
+            self._add_triples_from_dict(publisher_details, publisher_ref, items)    
+            
             
