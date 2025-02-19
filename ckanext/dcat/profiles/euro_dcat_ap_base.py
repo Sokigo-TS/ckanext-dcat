@@ -481,10 +481,15 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             else:
                 # No creator_uri
                 creator_ref = BNode()
+            
+            creator_email_uri = None
+            creator_email = self._get_dataset_value(dataset_dict, "creator_email")
+            if creator_email:
+                creator_email_uri = URIRef(f"mailto:{creator_email}")
 
             creator_details = {
                 "name": creator_name,
-                "email": self._get_dataset_value(dataset_dict, "creator_email"),
+                "email": creator_email_uri,
                 "url": self._get_dataset_value(dataset_dict, "creator_url"),
                 "type": self._get_dataset_value(dataset_dict, "creator_type"),
                 "identifier": self._get_dataset_value(dataset_dict, "creator_identifier"),
@@ -496,7 +501,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             g.add((dataset_ref, DCT.creator, creator_ref))  # Use DCT.creator for creator
             items = [
                 ("name", FOAF.name, None, Literal),
-                ("email", FOAF.mbox, None, Literal),
+                ("email", FOAF.mbox, None, URIRef),
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),

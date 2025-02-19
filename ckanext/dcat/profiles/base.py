@@ -449,7 +449,14 @@ class RDFProfile(object):
         for agent in self.g.objects(subject, predicate):
             agent_details["uri"] = str(agent) if isinstance(agent, term.URIRef) else ""
             agent_details["name"] = self._object_value(agent, FOAF.name)
-            agent_details["email"] = self._object_value(agent, FOAF.mbox)
+            
+            email = self._object_value(agent, FOAF.mbox)
+            if email:
+                email_uri = URIRef(f"mailto:{email}")
+                agent_details["email"] = email_uri
+            else:
+                agent_details["email"] = self._object_value(agent, FOAF.mbox)
+                
             agent_details["url"] = self._object_value(agent, FOAF.homepage)
             agent_details["type"] = self._object_value(agent, DCT.type)
             agent_details['identifier'] = self._object_value(agent, DCT.identifier)
