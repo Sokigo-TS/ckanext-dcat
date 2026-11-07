@@ -36,6 +36,25 @@ config = toolkit.config
 
 DISTRIBUTION_LICENSE_FALLBACK_CONFIG = "ckanext.dcat.resource.inherit.license"
 
+def _agent_label(helper_name, value):
+    """
+    Sokigo: publisher_name, creator_name and contact_name hold the id of an
+    entry in a JSON list served by a ckanext-sokigo helper
+    (get_publisher_from_json, get_producer_from_json, get_maintainer_from_json).
+    Returns the entry's label, or the value itself when there is no such entry
+    or no such helper.
+    """
+    if not value:
+        return value
+    try:
+        choices = getattr(toolkit.h, helper_name)(None) or []
+    except Exception:
+        return value
+    for item in choices:
+        if item.get("value") == value:
+            return item.get("label")
+    return value
+
 
 class BaseEuropeanDCATAPProfile(RDFProfile):
     """
@@ -419,6 +438,9 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 VCARD.fn,
                 "contact_name",
                 ["maintainer", "author"],
+                value_modifier=lambda value: _agent_label(
+                    "get_maintainer_from_json", value
+                ),
             )
             # Add mail address as URIRef, and ensure it has a mailto: prefix
             self._add_triple_from_dict(
@@ -452,7 +474,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 # No publisher_uri
                 publisher_ref = BNode()
             publisher_details = {
-                "name": publisher_name,
+                "name": _agent_label("get_publisher_from_json", publisher_name),
                 "email": self._get_dataset_value(dataset_dict, "publisher_email"),
                 "url": self._get_dataset_value(dataset_dict, "publisher_url"),
                 "type": self._get_dataset_value(dataset_dict, "publisher_type"),
@@ -487,9 +509,11 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
         if publisher_ref:
             g.add((publisher_ref, RDF.type, FOAF.Agent))
             g.add((dataset_ref, DCT.publisher, publisher_ref))
+            # Sokigo: foaf:mbox as a mailto: URI, not a Literal
+            publisher_details["email"] = self._add_mailto(publisher_details.get("email"))
             items = [
                 ("name", FOAF.name, None, Literal),
-                ("email", FOAF.mbox, None, Literal),
+                ("email", FOAF.mbox, None, URIRef),
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
@@ -518,7 +542,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 creator_ref = BNode()
 
             creator_details = {
-                "name": creator_name,
+                "name": _agent_label("get_producer_from_json", creator_name),
                 "email": self._get_dataset_value(dataset_dict, "creator_email"),
                 "url": self._get_dataset_value(dataset_dict, "creator_url"),
                 "type": self._get_dataset_value(dataset_dict, "creator_type"),
@@ -529,9 +553,11 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
         if creator_ref:
             g.add((creator_ref, RDF.type, FOAF.Agent))
             g.add((dataset_ref, DCT.creator, creator_ref))  # Use DCT.creator for creator
+            # Sokigo: foaf:mbox as a mailto: URI, not a Literal
+            creator_details["email"] = self._add_mailto(creator_details.get("email"))
             items = [
                 ("name", FOAF.name, None, Literal),
-                ("email", FOAF.mbox, None, Literal),
+                ("email", FOAF.mbox, None, URIRef),
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
