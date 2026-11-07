@@ -36,6 +36,22 @@ config = toolkit.config
 
 DISTRIBUTION_LICENSE_FALLBACK_CONFIG = "ckanext.dcat.resource.inherit.license"
 
+# Sokigo: CKAN license ids of distributions mapped to license URIs. Any other
+# license value is output as http://purl.org/adms/licencetype/UnknownIPR
+LICENSE_URI = {
+    "odc-pddl": "http://www.opendefinition.org/licenses/odc-pddl",
+    "odc-odbl": "http://www.opendefinition.org/licenses/odc-odbl",
+    "odc-by": "http://www.opendefinition.org/licenses/odc-by",
+    "cc-zero": "http://www.opendefinition.org/licenses/cc-zero",
+    "cc-by": "http://www.opendefinition.org/licenses/cc-by",
+    "cc-by-sa": "http://www.opendefinition.org/licenses/cc-by-sa",
+    "gfdl": "http://www.opendefinition.org/licenses/gfdl",
+    "uk-ogl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+    "cc-nc": "http://creativecommons.org/licenses/by-nc/2.0/",
+}
+UNKNOWN_LICENSE_URI = "http://purl.org/adms/licencetype/UnknownIPR"
+
+
 def _agent_label(helper_name, value):
     """
     Sokigo: publisher_name, creator_name and contact_name hold the id of an
@@ -644,7 +660,6 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 (name_key, DCT.title, None, Literal),
                 (description_key, DCT.description, None, Literal),
                 ("status", ADMS.status, None, URIRefOrLiteral),
-                ("license", DCT.license, None, URIRefOrLiteral, DCT.LicenseDocument),
                 ("access_url", DCAT.accessURL, None, URIRef, RDFS.Resource),
                 ("download_url", DCAT.downloadURL, None, URIRef, RDFS.Resource),
             ]
@@ -678,19 +693,23 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                         URIRefOrLiteral(resource_license_fallback),
                     )
                 )
-            # TODO: add an actual field to manage this
-            if (distribution, DCT.license, None) in g:
+            # Sokigo: the distribution's license is a CKAN license id, output
+            # as the license's URI, or as UnknownIPR when it has none
+            license_id = resource_dict.get("license")
+            if license_id:
                 g.add(
                     (
-                        list(g.objects(distribution, DCT.license))[0],
-                        DCT.type,
-                        URIRef("http://purl.org/adms/licencetype/UnknownIPR")
+                        distribution,
+                        DCT.license,
+                        URIRef(LICENSE_URI.get(license_id, UNKNOWN_LICENSE_URI)),
                     )
                 )
 
             # Format
+            # Sokigo: the CKAN format (e.g. "CSV") is not output. dct:format
+            # and dcat:mediaType both get the mimetype
             mimetype = resource_dict.get("mimetype")
-            fmt = resource_dict.get("format")
+            fmt = None
 
             # IANA media types (either URI or Literal) should be mapped as mediaType.
             # In case format is available and mimetype is not set or identical to format,
@@ -710,6 +729,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
 
             if mimetype:
                 mimetype = URIRefOrLiteral(mimetype)
+                fmt = mimetype
                 g.add((distribution, DCAT.mediaType, mimetype))
                 if isinstance(mimetype, URIRef):
                     g.add((mimetype, RDF.type, DCT.MediaType))
@@ -746,7 +766,10 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                         (
                             distribution,
                             DCAT.byteSize,
-                            Literal(Decimal(resource_dict["size"]), datatype=XSD.decimal),
+                            Literal(
+                                int(resource_dict["size"]),
+                                datatype=XSD.nonNegativeInteger,
+                            ),
                         )
                     )
                 except (ValueError, TypeError, DecimalException):
