@@ -1,5 +1,5 @@
 import json
-from decimal import Decimal, DecimalException
+from decimal import Decimal, DecimalException, ROUND_HALF_UP
 
 from rdflib import URIRef, BNode, Literal, Namespace, FOAF, PROV, RDF, RDFS
 from ckanext.dcat.utils import resource_uri
@@ -377,11 +377,15 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
         if spatial_resolution_in_meters:
             for value in spatial_resolution_in_meters:
                 try:
+                    # Sokigo: rounded to millimetres
+                    decimal_value = Decimal(value).quantize(
+                        Decimal("0.001"), rounding=ROUND_HALF_UP
+                    )
                     self.g.add(
                         (
                             dataset_ref,
                             DCAT.spatialResolutionInMeters,
-                            Literal(Decimal(value), datatype=XSD.decimal),
+                            Literal(decimal_value, datatype=XSD.decimal),
                         )
                     )
                 except (ValueError, TypeError, DecimalException):

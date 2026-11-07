@@ -594,6 +594,12 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             g.add((dataset_ref, DCT.temporal, temporal_extent))
 
         # Spatial
+        # Sokigo: spatial_uri (e.g. a geonames or a Swedish municipality URI)
+        # is output on its own, whether or not there is a geometry
+        spatial_uri = self._get_dataset_value(dataset_dict, "spatial_uri")
+        if spatial_uri:
+            g.add((dataset_ref, DCT.spatial, CleanedURIRef(spatial_uri)))
+
         spatial_text = self._get_dataset_value(dataset_dict, "spatial_text")
         spatial_geom = self._get_dataset_value(dataset_dict, "spatial")
 
@@ -606,6 +612,9 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             if spatial_geom:
                 self._add_spatial_value_to_graph(
                     spatial_ref, LOCN.geometry, spatial_geom
+                )
+                self._add_bbox_and_centroid_from_geometry(
+                    dataset_dict, spatial_ref, spatial_geom
                 )
 
         # Use fallback license if set in config
@@ -799,6 +808,46 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                         g.add((checksum_algo, RDF.type, SPDX.ChecksumAlgorithm))
 
                 g.add((distribution, SPDX.checksum, checksum))
+
+    def _add_bbox_and_centroid_from_geometry(self, dataset_dict, spatial_ref, geom):
+        """
+        Sokigo: adds dcat:bbox and dcat:centroid derived from the dataset's
+        spatial geometry (GeoJSON or WKT), unless the dataset has its own
+        spatial_bbox or spatial_centroid (which euro_dcat_ap_2 outputs).
+        Needs shapely, which ckanext-spatial installs.
+        """
+        try:
+            from shapely import wkt as shapely_wkt
+            from shapely.geometry import mapping, shape
+        except ImportError:
+            return
+        try:
+            if isinstance(geom, str):
+                try:
+                    geometry = shape(json.loads(geom))
+                except ValueError:
+                    geometry = shapely_wkt.loads(geom)
+            else:
+                geometry = shape(geom)
+            if geometry.is_empty:
+                return
+        except Exception:
+            return
+
+        if not self._get_dataset_value(dataset_dict, "spatial_bbox"):
+            self._add_spatial_value_to_graph(
+                spatial_ref, DCAT.bbox, mapping(geometry.envelope)
+            )
+        if not self._get_dataset_value(dataset_dict, "spatial_centroid"):
+            centroid = geometry.centroid
+            self._add_spatial_value_to_graph(
+                spatial_ref,
+                DCAT.centroid,
+                {
+                    "type": "Point",
+                    "coordinates": [round(centroid.x, 4), round(centroid.y, 4)],
+                },
+            )
 
     def _graph_from_catalog_base(self, catalog_dict, catalog_ref):
 

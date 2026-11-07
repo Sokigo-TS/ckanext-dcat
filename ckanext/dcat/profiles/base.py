@@ -1471,16 +1471,15 @@ class RDFProfile(object):
         return roots[0]
 
     def _get_or_create_spatial_ref(self, dataset_dict, dataset_ref):
+        # Sokigo: spatial_uri is a dct:spatial of its own (see
+        # euro_dcat_ap_base), so the dct:Location that holds the geometry,
+        # bbox and centroid is always a blank node
         for spatial_ref in self.g.objects(dataset_ref, DCT.spatial):
-            if spatial_ref:
+            if isinstance(spatial_ref, BNode):
                 return spatial_ref
 
         # Create new spatial_ref
-        spatial_uri = self._get_dataset_value(dataset_dict, "spatial_uri")
-        if spatial_uri:
-            spatial_ref = CleanedURIRef(spatial_uri)
-        else:
-            spatial_ref = BNode()
+        spatial_ref = BNode()
         self.g.add((spatial_ref, RDF.type, DCT.Location))
         self.g.add((dataset_ref, DCT.spatial, spatial_ref))
         return spatial_ref
