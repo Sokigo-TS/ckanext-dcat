@@ -103,6 +103,49 @@ groups:
           Store information about the origin catalog when harvesting datasets.
           See https://github.com/ckan/ckanext-dcat#transitive-harvesting for more details.
 
+  - annotation: Sokigo catalog settings (euro_dcat_ap profiles)
+    options:
+
+      - key: dcat_lang
+        default: 'http://publications.europa.eu/resource/authority/language/SWE'
+        description: |
+          dct:language of the catalog. Set with the env var CKAN___DCAT_LANG.
+
+      - key: ckan.site_spatial
+        description: |
+          URI of the catalog's dct:spatial.
+        example: 'http://sws.geonames.org/2661886/'
+
+      - key: ckan.site_license
+        description: |
+          dct:license of the catalog (URI or text).
+
+      - key: ckan.site_issued
+        description: |
+          dct:issued date of the catalog.
+        example: '2024-01-01'
+
+      - key: ckan.site_publisher_uri
+        description: |
+          URI of the catalog's dct:publisher. Without it the publisher is a blank node.
+
+      - key: ckan.site_publisher_name
+        description: |
+          foaf:name of the catalog's publisher.
+
+      - key: ckan.site_publisher_email
+        description: |
+          foaf:mbox of the catalog's publisher, output as a mailto: URI.
+
+      - key: ckan.site_publisher_url
+        description: |
+          foaf:homepage of the catalog's publisher.
+
+      - key: ckan.site_publisher_type
+        description: |
+          dct:type of the catalog's publisher.
+        example: 'http://purl.org/adms/publishertype/LocalAuthority'
+
   - annotation: Deprecated options (will be removed in future versions)
     options:
 

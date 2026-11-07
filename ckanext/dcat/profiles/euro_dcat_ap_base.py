@@ -868,12 +868,20 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 Literal,
             ),
             ("homepage", FOAF.homepage, config.get("ckan.site_url"), URIRef),
+            # Sokigo: the catalog language is the dcat_lang setting (env var
+            # CKAN___DCAT_LANG), Swedish by default, not ckan.locale_default
             (
                 "language",
                 DCT.language,
-                config.get("ckan.locale_default", "en"),
+                config.get(
+                    "dcat_lang",
+                    "http://publications.europa.eu/resource/authority/language/SWE",
+                ),
                 URIRefOrLiteral,
             ),
+            # Sokigo: catalog spatial coverage and license
+            ("spatial", DCT.spatial, config.get("ckan.site_spatial"), URIRef),
+            ("license", DCT.license, config.get("ckan.site_license"), URIRefOrLiteral),
         ]
         for item in items:
             key, predicate, fallback, _type = item
@@ -888,3 +896,29 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
         modified = self._last_catalog_modification()
         if modified:
             self._add_date_triple(catalog_ref, DCT.modified, modified)
+
+        # Sokigo: catalog issued date and publisher, from ckan.site_* settings
+        issued = config.get("ckan.site_issued")
+        if issued:
+            self._add_date_triple(catalog_ref, DCT.issued, issued)
+
+        publisher_details = {
+            "name": config.get("ckan.site_publisher_name"),
+            "email": self._add_mailto(config.get("ckan.site_publisher_email")),
+            "url": config.get("ckan.site_publisher_url"),
+            "type": config.get("ckan.site_publisher_type"),
+        }
+        publisher_uri = config.get("ckan.site_publisher_uri")
+        if publisher_uri or any(publisher_details.values()):
+            publisher_ref = (
+                CleanedURIRef(publisher_uri) if publisher_uri else BNode()
+            )
+            g.add((publisher_ref, RDF.type, FOAF.Agent))
+            g.add((catalog_ref, DCT.publisher, publisher_ref))
+            items = [
+                ("name", FOAF.name, None, Literal),
+                ("email", FOAF.mbox, None, URIRef),
+                ("url", FOAF.homepage, None, URIRef),
+                ("type", DCT.type, None, URIRefOrLiteral),
+            ]
+            self._add_triples_from_dict(publisher_details, publisher_ref, items)
